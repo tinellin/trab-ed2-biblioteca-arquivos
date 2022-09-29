@@ -177,7 +177,7 @@ void inserir(FILE *arqInserir, FILE *arqFinal)
 	buffer = obterRegistro(arqInserir, 'i', sizeof(Livro));
 	tam = strlen(buffer);
 
-	// Se os primeiros 4 bytes n�o retorna-r um inteiro, coloca -1
+	// Se os primeiros 4 bytes nao retornar um inteiro, coloca -1
 	fread(&header, 1, sizeof(int), arqFinal);
 
 	if (header == 0 || header == -1)
@@ -194,7 +194,7 @@ void inserir(FILE *arqInserir, FILE *arqFinal)
 		// Salva o buffer do registro
 		fwrite(buffer, tam, 1, arqFinal);
 	}
-	else
+	else // imprime em espacos vazios
 	{
 		int offset = header, aux = header;
 		int tamRemovido;
@@ -290,7 +290,7 @@ void remover(FILE *arqRemover, FILE *arqFinal)
 	isbn = obterRegistro(arqRemover, 'r', TAM_ISBN);
 	// printf("ISBN Remover: %s\n", isbn);
 
-	// Procurar no biblioteca.bin, o registro que ser� removido a partir do ISBN
+	// Procurar no biblioteca.bin, o registro que sera removido a partir do ISBN
 	fread(&header, sizeof(int), 1, arqFinal);
 
 	do
@@ -301,7 +301,7 @@ void remover(FILE *arqRemover, FILE *arqFinal)
 		// Ler ISBN
 		fread(isbnBiblioteca, TAM_ISBN, 1, arqFinal);
 
-		// Ir pro pr�ximo registro a partir da posi��o atual
+		// Ir pro proximo registro a partir da posicao atual
 		fseek(arqFinal, tamRegistro - TAM_ISBN, SEEK_CUR);
 
 		// printf("ISBN Biblioteca: %s\n", isbnBiblioteca);
@@ -347,11 +347,12 @@ void compactar(FILE *arqFinal)
 	{
 		ch = fgetc(arqFinal);
 
-		// printf("%d - %c \n", ftell(arqFinal), ch);
+		// printf("fgetc: %c ftell: %d\n", ch, ftell(arqFinal));
+
 		if (ch == '*')
 		{
-			printf("%d\n", ftell(arqFinal));
-			pos = ftell(arqFinal) - 1;						 // Pega a posição do * - 1
+			printf("ftell: %d\n", ftell(arqFinal));
+			pos = ftell(arqFinal) - 5;						 // Pega a posição do * - 5
 			fseek(arqFinal, -5, SEEK_CUR);				 // voltando antes do asterisco
 			fread(&tam, sizeof(int), 1, arqFinal); // pegando o tamanho do espaço vazio
 
@@ -362,28 +363,39 @@ void compactar(FILE *arqFinal)
 			{
 				fread(&tamRegistro, sizeof(int), 1, arqFinal); // pegando o tamanho do registro após o vazio
 
-				printf("tamanho reg: %d(%d + %d = %d)\n", tamRegistro, ftell(arqFinal), tamRegistro, ftell(arqFinal) + tamRegistro);
+				printf("tamanho reg: %d\n", tamRegistro);
 
-				// printf("tam registro atual: %d\n", tamRegistro);
-
-				tamTotal += tamRegistro;
-				// printf("%d\n", tamTotal);
+				tamTotal += tamRegistro + sizeof(int);
 
 				fseek(arqFinal, tamRegistro, SEEK_CUR);
-				// printf(" nova posicao do outro registro: %d\n", ftell(arqFinal));
 			}
 
-			printf("tamanho total armazenado: %d\n", tamTotal);
+			printf("tam total: %d\n", tamTotal);
+
 			bloco = (char *)malloc(sizeof(char) * tamTotal);
 
-			fseek(arqFinal, pos, SEEK_SET);			 // voltando para o início do arquivo e voltando na posição do primeiro registro depois do *
+			fseek(arqFinal, pos + tam + sizeof(int), SEEK_SET); // voltando para o início do arquivo e voltando na posição do primeiro registro depois do *
+
 			fread(bloco, tamTotal, 1, arqFinal); // armazenando todos os caracteres dos registros após o registro vazio
+
+			printf("%s\n", bloco);
+
+			printf("tam: %d\n", tamRegistro);
+
+			fseek(arqFinal, -1 * (tam + sizeof(int)), SEEK_END);
+			while (ftell(arqFinal) != tamArquivo)
+			{
+				fwrite("j", 1, sizeof(char), arqFinal);
+			}
 
 			fseek(arqFinal, pos, SEEK_SET);				// voltando para a posição do registro a ser compactado
 			fwrite(bloco, tamTotal, 1, arqFinal); // inserindo o bloco na posicao
 
 			fseek(arqFinal, pos, SEEK_SET);
+
 			tamTotal = 0;
+
+			printf("-----------------------------\n");
 		}
 	}
 }
