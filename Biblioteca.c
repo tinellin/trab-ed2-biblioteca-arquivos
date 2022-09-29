@@ -18,7 +18,9 @@ void fecharArquivo(FILE *arq);
 char *obterRegistro(FILE *arq, char flag, int tam);
 void inserir();
 void remover();
-void compactar(FILE *arqFinal);
+void compactarExterna(FILE *arqFinal);
+void compactarInterna(FILE *arqFinal);
+void limparEspacosFinal(FILE *arqFinal, int tamArquivo);
 
 /**********************************MAIN****************************************/
 int main()
@@ -26,10 +28,6 @@ int main()
 	setlocale(LC_ALL, "");
 	int op;
 	FILE *arqInserir, *arqRemover, *arqFinal;
-
-	// lista existe dentro do arquivo!!
-	// lembrar do sprintf para salvar as variaveis dos arquivos na mem�ria
-	// no remover pegar o endereco do registro removido e ja atualizar no header
 
 	// Menu
 	printf("*-------- BIBLIOTECA --------*\n");
@@ -70,18 +68,12 @@ int main()
 		case 3:
 		{
 			arqFinal = abrirArquivo("biblioteca.bin");
-			compactar(arqFinal);
+			compactarExterna(arqFinal);
 			fecharArquivo(arqFinal);
-			break;
-		}
-		case 4:
-		{
-			printf("d");
 			break;
 		}
 		case 0:
 		{
-			printf("e");
 			exit(0);
 			break;
 		}
@@ -112,58 +104,58 @@ void fecharArquivo(FILE *arq)
 	fclose(arq);
 }
 
-/* fun��o inserir
-abrir arquivo inserir.bin
-ler dado e salvar na struct
-atualizar o contador no arquivo inserir.bin
-fechar arquivo inserir.bin
-abrir arquivo biblioteca.bin
-salvar dados da struct no arquivo biblioteca
-fechar arquivo biblioteca
-*/
-
 char *obterRegistro(FILE *arq, char flag, int tam)
 {
 	Livro livro;
 	char isbn[14];
 
-	char *buffer = malloc(sizeof(char));
-	char *ch = malloc(sizeof(char));
+	char *buffer = (char *)malloc(sizeof(Livro) + 6);
+
+	char *ch = (char *)malloc(sizeof(char));
+
 	int ct;
 
 	if (fgetc(arq) == '@')
 	{
-		*ch = fgetc(arq);
-		ct = atoi(ch);
 
-		printf("%d\n", ct);
+		*ch = fgetc(arq);
+
+		ct = atoi(ch);
 
 		// Pular para posicao desejada e ler o registro
 		flag == 'i' ? fseek(arq, tam * ct, SEEK_SET) : fseek(arq, (tam * ct) + ct, SEEK_SET);
-		flag == 'i' ? fread(&livro, tam, 1, arq) : fread(&isbn, tam + 1, 1, arq);
 
-		printf("%s - %d\n", isbn, ftell(arq));
+		flag == 'i' ? fread(&livro, tam, 1, arq) : fread(&isbn, tam + 1, 1, arq);
 
 		// Salvar o proximo registro a ser lido
 		rewind(arq);
+
 		ct++;
+
 		*ch = ct + '0';
 
 		fseek(arq, 1, SEEK_SET);
+
 		fwrite(ch, 1, sizeof(char), arq);
 	}
 	else
 	{
+
 		rewind(arq);
+
 		flag == 'i' ? fread(&livro, tam, 1, arq) : fread(&isbn, tam, 1, arq);
 		rewind(arq);
 		fwrite("@1", 1, 2 * sizeof(char), arq);
 	}
 
 	if (flag == 'i')
+	{
 		sprintf(buffer, "%s#%s#%s#%s#", livro.isbn, livro.titulo, livro.autor, livro.ano);
+	}
 	else
+	{
 		strcpy(buffer, isbn);
+	}
 
 	return buffer;
 }
@@ -175,6 +167,7 @@ void inserir(FILE *arqInserir, FILE *arqFinal)
 	int offset = 0, header = 0, inserido = 0;
 
 	buffer = obterRegistro(arqInserir, 'i', sizeof(Livro));
+
 	tam = strlen(buffer);
 
 	// Se os primeiros 4 bytes nao retornar um inteiro, coloca -1
@@ -202,12 +195,9 @@ void inserir(FILE *arqInserir, FILE *arqFinal)
 		fseek(arqFinal, offset, SEEK_SET);
 
 		fread(&tamRemovido, sizeof(int), 1, arqFinal);
-		// 20
 		//  Caso A
 		if (tamRemovido >= tam)
 		{
-			// atualizarTamanho(arqFinal, tam);
-
 			fseek(arqFinal, 1, SEEK_CUR);
 			fread(&aux, sizeof(int), 1, arqFinal);
 
@@ -226,8 +216,6 @@ void inserir(FILE *arqInserir, FILE *arqFinal)
 			{
 				// Próximo offset
 				fseek(arqFinal, 1, SEEK_CUR);
-
-				// aux 5 -> 78
 				fread(&aux, sizeof(int), 1, arqFinal);
 
 				fseek(arqFinal, aux, SEEK_SET);
@@ -287,8 +275,7 @@ void remover(FILE *arqRemover, FILE *arqFinal)
 
 	char ch;
 
-	isbn = obterRegistro(arqRemover, 'r', TAM_ISBN);
-	// printf("ISBN Remover: %s\n", isbn);
+	strcpy(isbn, obterRegistro(arqRemover, 'r', TAM_ISBN));
 
 	// Procurar no biblioteca.bin, o registro que sera removido a partir do ISBN
 	fread(&header, sizeof(int), 1, arqFinal);
@@ -303,16 +290,12 @@ void remover(FILE *arqRemover, FILE *arqFinal)
 
 		// Ir pro proximo registro a partir da posicao atual
 		fseek(arqFinal, tamRegistro - TAM_ISBN, SEEK_CUR);
-
-		// printf("ISBN Biblioteca: %s\n", isbnBiblioteca);
 	} while (strcmp(isbnBiblioteca, isbn) != 0);
 
 	fseek(arqFinal, (ftell(arqFinal) - tamRegistro), SEEK_SET);
 
 	fwrite("*", 1, sizeof(char), arqFinal);
 	fwrite(&header, sizeof(int), 1, arqFinal);
-
-	// printf("POSICAO: %d\n", ftell(arqFinal));
 
 	// Obter a posicao do inicio do ISBN
 	posRemovido = ftell(arqFinal);
@@ -330,13 +313,14 @@ void remover(FILE *arqRemover, FILE *arqFinal)
 	fwrite(&posRemovido, sizeof(int), 1, arqFinal);
 }
 
-void compactar(FILE *arqFinal)
+void compactarExterna(FILE *arqFinal)
 {
 	int tam, tamRegistro, header, pos, offset = 0;
 	int tamTotal = 0;
 	char ch, aux, *buffer = malloc(sizeof(char));
 	char *bloco;
 	Livro livro;
+	int c = 0;
 
 	fseek(arqFinal, 0, SEEK_END);
 	int tamArquivo = ftell(arqFinal);
@@ -347,11 +331,8 @@ void compactar(FILE *arqFinal)
 	{
 		ch = fgetc(arqFinal);
 
-		// printf("fgetc: %c ftell: %d\n", ch, ftell(arqFinal));
-
 		if (ch == '*')
 		{
-			printf("ftell: %d\n", ftell(arqFinal));
 			pos = ftell(arqFinal) - 5;						 // Pega a posição do * - 5
 			fseek(arqFinal, -5, SEEK_CUR);				 // voltando antes do asterisco
 			fread(&tam, sizeof(int), 1, arqFinal); // pegando o tamanho do espaço vazio
@@ -363,14 +344,10 @@ void compactar(FILE *arqFinal)
 			{
 				fread(&tamRegistro, sizeof(int), 1, arqFinal); // pegando o tamanho do registro após o vazio
 
-				printf("tamanho reg: %d\n", tamRegistro);
-
 				tamTotal += tamRegistro + sizeof(int);
 
 				fseek(arqFinal, tamRegistro, SEEK_CUR);
 			}
-
-			printf("tam total: %d\n", tamTotal);
 
 			bloco = (char *)malloc(sizeof(char) * tamTotal);
 
@@ -378,14 +355,12 @@ void compactar(FILE *arqFinal)
 
 			fread(bloco, tamTotal, 1, arqFinal); // armazenando todos os caracteres dos registros após o registro vazio
 
-			printf("%s\n", bloco);
-
-			printf("tam: %d\n", tamRegistro);
-
 			fseek(arqFinal, -1 * (tam + sizeof(int)), SEEK_END);
+
 			while (ftell(arqFinal) != tamArquivo)
 			{
-				fwrite("j", 1, sizeof(char), arqFinal);
+				fwrite("\0", 1, sizeof(char), arqFinal);
+				c++;
 			}
 
 			fseek(arqFinal, pos, SEEK_SET);				// voltando para a posição do registro a ser compactado
@@ -394,8 +369,76 @@ void compactar(FILE *arqFinal)
 			fseek(arqFinal, pos, SEEK_SET);
 
 			tamTotal = 0;
-
-			printf("-----------------------------\n");
 		}
 	}
+
+	limparEspacosFinal(arqFinal, tamArquivo - c);
+}
+
+void compactarInterna(FILE *arqFinal)
+{
+	int header, offset, tamRegistro, tamAntigo, tamAtual, tamTotal = 0, pos = 0;
+	char ch;
+	char reg[sizeof(Livro)];
+
+	fseek(arqFinal, 0, SEEK_END);
+	int tamArquivo = ftell(arqFinal);
+
+	char *bloco = (char *)malloc(sizeof(char));
+
+	fseek(arqFinal, sizeof(int), SEEK_SET); // pula o header
+
+	while (ftell(arqFinal) != tamArquivo)
+	{
+		fread(&tamRegistro, sizeof(int), 1, arqFinal); // pegando tamanho do registro
+		fread(reg, 1, tamRegistro, arqFinal);					 // preenchendo a string com o registro
+
+		tamAtual = strlen(reg);
+		tamAntigo = tamRegistro;
+
+		if (tamAtual < tamRegistro)
+		{
+			pos = ftell(arqFinal);
+
+			while (ftell(arqFinal) != tamArquivo) // somando os tamanhos
+			{
+				fread(&tamRegistro, sizeof(int), 1, arqFinal);
+				fseek(arqFinal, tamRegistro, SEEK_CUR);
+				tamTotal += tamRegistro + sizeof(int);
+			}
+
+			bloco = (char *)realloc(bloco, sizeof(char) * tamTotal);
+
+			fseek(arqFinal, pos, SEEK_SET); // esta no final do registro com a sobra
+
+			tamTotal = 0;
+		}
+
+		break;
+	}
+}
+
+void limparEspacosFinal(FILE *arqFinal, int tamArquivo)
+{
+	char *buffer = (char *)malloc(sizeof(char) * tamArquivo);
+	char ch;
+	int i = 0;
+
+	rewind(arqFinal);
+
+	// Criar buffer
+	while (ftell(arqFinal) <= tamArquivo)
+	{
+		ch = fgetc(arqFinal);
+		buffer[i] = ch;
+		i++;
+	}
+
+	fecharArquivo(arqFinal);
+
+	FILE *arqFinalLimpo = fopen("biblioteca.bin", "w+b");
+
+	fwrite(buffer, sizeof(char), tamArquivo, arqFinalLimpo);
+
+	fecharArquivo(arqFinalLimpo);
 }
